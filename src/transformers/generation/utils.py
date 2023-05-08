@@ -1151,6 +1151,7 @@ class GenerationMixin:
         synced_gpus: Optional[bool] = None,
         assistant_model: Optional["PreTrainedModel"] = None,
         streamer: Optional["BaseStreamer"] = None,
+        adapter_weights: Optional[List[List[torch.Tensor]]] = None,
         **kwargs,
     ) -> Union[GenerateOutput, torch.LongTensor]:
         r"""
@@ -1500,6 +1501,7 @@ class GenerationMixin:
                 return_dict_in_generate=generation_config.return_dict_in_generate,
                 synced_gpus=synced_gpus,
                 streamer=streamer,
+                adapter_weights=adapter_weights,
                 **model_kwargs,
             )
         if is_greedy_gen_mode:
@@ -1520,6 +1522,7 @@ class GenerationMixin:
                 return_dict_in_generate=generation_config.return_dict_in_generate,
                 synced_gpus=synced_gpus,
                 streamer=streamer,
+                adapter_weights=adapter_weights,
                 **model_kwargs,
             )
 
@@ -1544,6 +1547,7 @@ class GenerationMixin:
                 return_dict_in_generate=generation_config.return_dict_in_generate,
                 synced_gpus=synced_gpus,
                 streamer=streamer,
+                adapter_weights=adapter_weights,
                 **model_kwargs,
             )
 
@@ -1571,6 +1575,7 @@ class GenerationMixin:
                 return_dict_in_generate=generation_config.return_dict_in_generate,
                 synced_gpus=synced_gpus,
                 streamer=streamer,
+                adapter_weights=adapter_weights,
                 **model_kwargs,
             )
 
@@ -1609,6 +1614,7 @@ class GenerationMixin:
                 output_scores=generation_config.output_scores,
                 return_dict_in_generate=generation_config.return_dict_in_generate,
                 synced_gpus=synced_gpus,
+                adapter_weights=adapter_weights,
                 **model_kwargs,
             )
 
@@ -1648,6 +1654,7 @@ class GenerationMixin:
                 output_scores=generation_config.output_scores,
                 return_dict_in_generate=generation_config.return_dict_in_generate,
                 synced_gpus=synced_gpus,
+                adapter_weights=adapter_weights,
                 **model_kwargs,
             )
 
@@ -1694,6 +1701,7 @@ class GenerationMixin:
                 output_scores=generation_config.output_scores,
                 return_dict_in_generate=generation_config.return_dict_in_generate,
                 synced_gpus=synced_gpus,
+                adapter_weights=adapter_weights,
                 **model_kwargs,
             )
 
@@ -1782,6 +1790,7 @@ class GenerationMixin:
                 output_scores=generation_config.output_scores,
                 return_dict_in_generate=generation_config.return_dict_in_generate,
                 synced_gpus=synced_gpus,
+                adapter_weights=adapter_weights,
                 **model_kwargs,
             )
 
@@ -1802,6 +1811,7 @@ class GenerationMixin:
         return_dict_in_generate: Optional[bool] = None,
         synced_gpus: bool = False,
         streamer: Optional["BaseStreamer"] = None,
+        adapter_weights: Optional[List[List[torch.Tensor]]] = None,
         **model_kwargs,
     ) -> Union[ContrastiveSearchOutput, torch.LongTensor]:
         r"""
@@ -1947,7 +1957,7 @@ class GenerationMixin:
                 # encode the given prefix and prepare model inputs; encoder-decoder model process the prefix and save
                 # the `encoder_outputs`
                 outputs = self(
-                    **model_inputs, return_dict=True, output_hidden_states=True, output_attentions=output_attentions
+                    **model_inputs, return_dict=True, output_hidden_states=True, output_attentions=output_attentions, adapter_weights=adapter_weights,
                 )
 
                 # last decoder hidden states will be used to compute the degeneration penalty (cosine similarity with
@@ -2026,7 +2036,7 @@ class GenerationMixin:
             # compute the candidate tokens by the language model and collects their hidden_states
             next_model_inputs = self.prepare_inputs_for_generation(top_k_ids.view(-1, 1), **model_kwargs)
             outputs = self(
-                **next_model_inputs, return_dict=True, output_hidden_states=True, output_attentions=output_attentions
+                **next_model_inputs, return_dict=True, output_hidden_states=True, output_attentions=output_attentions, adapter_weights=adapter_weights,
             )
             next_past_key_values = self._extract_past_from_model_output(outputs, standardize_cache_format=True)
 
@@ -2173,6 +2183,7 @@ class GenerationMixin:
         return_dict_in_generate: Optional[bool] = None,
         synced_gpus: bool = False,
         streamer: Optional["BaseStreamer"] = None,
+        adapter_weights: Optional[List[List[torch.Tensor]]] = None,
         **model_kwargs,
     ) -> Union[GreedySearchOutput, torch.LongTensor]:
         r"""
@@ -2332,6 +2343,7 @@ class GenerationMixin:
                 return_dict=True,
                 output_attentions=output_attentions,
                 output_hidden_states=output_hidden_states,
+                adapter_weights=adapter_weights,
             )
 
             if synced_gpus and this_peer_finished:
@@ -2433,6 +2445,7 @@ class GenerationMixin:
         return_dict_in_generate: Optional[bool] = None,
         synced_gpus: bool = False,
         streamer: Optional["BaseStreamer"] = None,
+        adapter_weights: Optional[List[List[torch.Tensor]]] = None,
         **model_kwargs,
     ) -> Union[SampleOutput, torch.LongTensor]:
         r"""
@@ -2612,6 +2625,7 @@ class GenerationMixin:
                 return_dict=True,
                 output_attentions=output_attentions,
                 output_hidden_states=output_hidden_states,
+                adapter_weights=adapter_weights,
             )
 
             if synced_gpus and this_peer_finished:
@@ -2714,6 +2728,7 @@ class GenerationMixin:
         output_scores: Optional[bool] = None,
         return_dict_in_generate: Optional[bool] = None,
         synced_gpus: bool = False,
+        adapter_weights: Optional[List[List[torch.Tensor]]] = None,
         **model_kwargs,
     ) -> Union[BeamSearchOutput, torch.LongTensor]:
         r"""
@@ -2902,6 +2917,7 @@ class GenerationMixin:
                 return_dict=True,
                 output_attentions=output_attentions,
                 output_hidden_states=output_hidden_states,
+                adapter_weights=adapter_weights,
             )
 
             if synced_gpus and this_peer_finished:
@@ -3038,6 +3054,7 @@ class GenerationMixin:
         output_scores: Optional[bool] = None,
         return_dict_in_generate: Optional[bool] = None,
         synced_gpus: bool = False,
+        adapter_weights: Optional[List[List[torch.Tensor]]] = None,
         **model_kwargs,
     ) -> Union[BeamSampleOutput, torch.LongTensor]:
         r"""
@@ -3228,6 +3245,7 @@ class GenerationMixin:
                 return_dict=True,
                 output_attentions=output_attentions,
                 output_hidden_states=output_hidden_states,
+                adapter_weights=adapter_weights,
             )
 
             if synced_gpus and this_peer_finished:
@@ -3370,6 +3388,7 @@ class GenerationMixin:
         output_scores: Optional[bool] = None,
         return_dict_in_generate: Optional[bool] = None,
         synced_gpus: bool = False,
+        adapter_weights: Optional[List[List[torch.Tensor]]] = None,
         **model_kwargs,
     ):
         r"""
@@ -3573,6 +3592,7 @@ class GenerationMixin:
                 return_dict=True,
                 output_attentions=output_attentions,
                 output_hidden_states=output_hidden_states,
+                adapter_weights=adapter_weights,
             )
 
             if synced_gpus and this_peer_finished:
@@ -3750,6 +3770,7 @@ class GenerationMixin:
         output_scores: Optional[bool] = None,
         return_dict_in_generate: Optional[bool] = None,
         synced_gpus: Optional[bool] = None,
+        adapter_weights: Optional[List[List[torch.Tensor]]] = None,
         **model_kwargs,
     ) -> Union[BeamSearchOutput, torch.LongTensor]:
         r"""
@@ -3946,6 +3967,7 @@ class GenerationMixin:
                 return_dict=True,
                 output_attentions=output_attentions,
                 output_hidden_states=output_hidden_states,
+                adapter_weights=adapter_weights,
             )
 
             if synced_gpus and this_peer_finished:
@@ -4077,6 +4099,7 @@ class GenerationMixin:
         return_dict_in_generate: Optional[bool] = None,
         synced_gpus: bool = False,
         streamer: Optional["BaseStreamer"] = None,
+        adapter_weights: Optional[List[List[torch.Tensor]]] = None,
         **model_kwargs,
     ):
         r"""
@@ -4221,9 +4244,6 @@ class GenerationMixin:
         # keep track of which sequences are already finished
         unfinished_sequences = input_ids.new(input_ids.shape[0]).fill_(1)
 
-        # other auxiliary variables
-        max_len = stopping_criteria[0].max_length
-
         this_peer_finished = False  # used by synced_gpus only
         while True:
             if synced_gpus:
@@ -4238,7 +4258,7 @@ class GenerationMixin:
 
             # Assistant: main logic start
             cur_len = input_ids.shape[-1]
-            assistant_kv_indexing = 0 if "bloom" not in assistant_model.__class__.__name__.lower() else 1
+            max_len = stopping_criteria[0].max_length
 
             #  1. Forecast next N tokens using the assistant model. This `for` block can be replaced with a
             # `.generate()` call if we decide to add `past_key_values` as a possible output of generate, as we
@@ -4247,7 +4267,7 @@ class GenerationMixin:
             for _ in range(int(assistant_model.max_assistant_tokens)):
                 # 1.1. use the assistant model to obtain the next candidate logits
                 if "assistant_past_key_values" in model_kwargs:
-                    prev_seq_len = model_kwargs["assistant_past_key_values"][0][assistant_kv_indexing].shape[-2]
+                    prev_seq_len = model_kwargs["assistant_past_key_values"][0][0].shape[2]
                     # `new_token_len` can be 1 or 2 (next token in assistant + last token picked by the larger model)
                     new_token_len = candidate_input_ids.shape[1] - prev_seq_len
                     assist_inputs = candidate_input_ids[:, -new_token_len:]
@@ -4313,6 +4333,7 @@ class GenerationMixin:
                         encoder_outputs=model_kwargs["encoder_outputs"],
                         output_attentions=output_attentions,
                         output_hidden_states=output_hidden_states,
+                        adapter_weights=adapter_weights,
                     )
                 else:
                     outputs = self(
@@ -4321,6 +4342,7 @@ class GenerationMixin:
                         past_key_values=model_kwargs["past_key_values"],
                         output_attentions=output_attentions,
                         output_hidden_states=output_hidden_states,
+                        adapter_weights=adapter_weights,
                     )
             else:
                 if self.config.is_encoder_decoder:
@@ -4329,12 +4351,14 @@ class GenerationMixin:
                         encoder_outputs=model_kwargs["encoder_outputs"],
                         output_attentions=output_attentions,
                         output_hidden_states=output_hidden_states,
+                        adapter_weights=adapter_weights,
                     )
                 else:
                     outputs = self(
                         candidate_input_ids,
                         output_attentions=output_attentions,
                         output_hidden_states=output_hidden_states,
+                        adapter_weights=adapter_weights,
                     )
 
             # 2.2. Process the new logits
@@ -4484,7 +4508,6 @@ class GenerationMixin:
         else:
             return input_ids
 
-
 def _crop_past_key_values(model, past_key_values, maximum_length):
     """Crops the past key values up to a certain maximum length."""
     new_past = []
@@ -4508,13 +4531,6 @@ def _crop_past_key_values(model, past_key_values, maximum_length):
                 )
             )
         past_key_values = tuple(new_past)
-    elif "gptbigcode" in model.__class__.__name__.lower():  # gptbigcode is too
-        if model.config.multi_query:
-            for idx in range(len(past_key_values)):
-                past_key_values[idx] = past_key_values[idx][:, :maximum_length, :]
-        else:
-            for idx in range(len(past_key_values)):
-                past_key_values[idx] = past_key_values[idx][:, :, :maximum_length, :]
     else:
         for idx in range(len(past_key_values)):
             new_past.append(

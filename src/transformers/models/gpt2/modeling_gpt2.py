@@ -48,7 +48,6 @@ from ...utils import (
 from ...utils.model_parallel_utils import assert_device_map, get_device_map
 from .configuration_gpt2 import GPT2Config
 
-
 logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "gpt2"
@@ -62,6 +61,25 @@ GPT2_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "distilgpt2",
     # See all GPT-2 models at https://huggingface.co/models?filter=gpt2
 ]
+
+# Houlsby adapter/bottleneck adapter (arXiv:1902.00751)
+# you can create a similar function to apply LoRA adapter (arXiv:2106.09685)
+def matrix_adapter(w_1:torch.Tensor, # weights of first layer
+                   w_2:torch.Tensor, # weight of second layer
+                   b_1:torch.Tensor, # bias of first layer
+                   b_2:torch.Tensor, # bias of second layer
+                   inp: torch.Tensor, # inp tensor coming from layer where adapter is being applied
+                   mask:Union[torch.Tensor, Any] = None,
+                   ) -> torch.Tensor:
+    if mask is None:
+        mask = torch.ones((1, inp.shape[1],1))
+    y = torch.bmm(inp, w_1) + b_1
+    y = torch.nn.functional.relu(y)
+    y = mask * y 
+    y = torch.bmm(y, w_2) + b_2
+    y = torch.nn.functional.relu(y)
+    y = mask * y 
+    return y + inp
 
 
 def load_tf_weights_in_gpt2(model, config, gpt2_checkpoint_path):
@@ -297,6 +315,7 @@ class GPT2Attention(nn.Module):
         encoder_attention_mask: Optional[torch.FloatTensor] = None,
         use_cache: Optional[bool] = False,
         output_attentions: Optional[bool] = False,
+        adapter_weights: Optional[List[torch.Tensor]] = None,
     ) -> Tuple[Union[torch.Tensor, Tuple[torch.Tensor]], ...]:
         if encoder_hidden_states is not None:
             if not hasattr(self, "q_attn"):
@@ -334,6 +353,8 @@ class GPT2Attention(nn.Module):
         attn_output = self.c_proj(attn_output)
         attn_output = self.resid_dropout(attn_output)
 
+        attn_output = matrix_adapter(*adapter_weights, attn_output)
+
         outputs = (attn_output, present)
         if output_attentions:
             outputs += (attn_weights,)
@@ -350,11 +371,14 @@ class GPT2MLP(nn.Module):
         self.act = ACT2FN[config.activation_function]
         self.dropout = nn.Dropout(config.resid_pdrop)
 
-    def forward(self, hidden_states: Optional[Tuple[torch.FloatTensor]]) -> torch.FloatTensor:
+    def forward(self, 
+                hidden_states: Optional[Tuple[torch.FloatTensor]],
+                adapter_weights: Optional[List[torch.Tensor]]) -> torch.FloatTensor:
         hidden_states = self.c_fc(hidden_states)
         hidden_states = self.act(hidden_states)
         hidden_states = self.c_proj(hidden_states)
         hidden_states = self.dropout(hidden_states)
+        hidden_states = matrix_adapter(*adapter_weights, hidden_states)
         return hidden_states
 
 
@@ -384,6 +408,7 @@ class GPT2Block(nn.Module):
         encoder_attention_mask: Optional[torch.FloatTensor] = None,
         use_cache: Optional[bool] = False,
         output_attentions: Optional[bool] = False,
+        adapter_weights: Optional[List[List[torch.Tensor]]] = None,
     ) -> Union[Tuple[torch.Tensor], Optional[Tuple[torch.Tensor, Tuple[torch.FloatTensor, ...]]]]:
         residual = hidden_states
         hidden_states = self.ln_1(hidden_states)
@@ -394,6 +419,7 @@ class GPT2Block(nn.Module):
             head_mask=head_mask,
             use_cache=use_cache,
             output_attentions=output_attentions,
+            adapter_weights=adapter_weights[0],
         )
         attn_output = attn_outputs[0]  # output_attn: a, present, (attentions)
         outputs = attn_outputs[1:]
@@ -424,7 +450,7 @@ class GPT2Block(nn.Module):
 
         residual = hidden_states
         hidden_states = self.ln_2(hidden_states)
-        feed_forward_hidden_states = self.mlp(hidden_states)
+        feed_forward_hidden_states = self.mlp(hidden_states, adapter_weights=adapter_weights[1])
         # residual connection
         hidden_states = residual + feed_forward_hidden_states
 
@@ -766,6 +792,7 @@ class GPT2Model(GPT2PreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        adapter_weights: Optional[List[List[torch.Tensor]]] = None,
     ) -> Union[Tuple, BaseModelOutputWithPastAndCrossAttentions]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -865,6 +892,7 @@ class GPT2Model(GPT2PreTrainedModel):
         all_hidden_states = () if output_hidden_states else None
         for i, (block, layer_past) in enumerate(zip(self.h, past_key_values)):
             # Model parallel
+            block_adapter_weights = [adapter_weights[2*i], adapter_weights[(2*i) + 1]]
             if self.model_parallel:
                 torch.cuda.set_device(hidden_states.device)
                 # Ensure layer_past is on same device as hidden_states (might not be correct)
@@ -906,6 +934,7 @@ class GPT2Model(GPT2PreTrainedModel):
                     encoder_attention_mask=encoder_attention_mask,
                     use_cache=use_cache,
                     output_attentions=output_attentions,
+                    adapter_weights=block_adapter_weights,
                 )
 
             hidden_states = outputs[0]
@@ -953,7 +982,7 @@ class GPT2Model(GPT2PreTrainedModel):
     """,
     GPT2_START_DOCSTRING,
 )
-class GPT2LMHeadModel(GPT2PreTrainedModel):
+class GPT2LMHeadModelMatrixAda(GPT2PreTrainedModel):
     _keys_to_ignore_on_load_missing = [r"attn.masked_bias", r"attn.bias", r"lm_head.weight"]
 
     def __init__(self, config):
@@ -1064,6 +1093,7 @@ class GPT2LMHeadModel(GPT2PreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        adapter_weights: Optional[List[List[torch.Tensor]]] = None,
     ) -> Union[Tuple, CausalLMOutputWithCrossAttentions]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -1087,6 +1117,7 @@ class GPT2LMHeadModel(GPT2PreTrainedModel):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
+            adapter_weights=adapter_weights,
         )
         hidden_states = transformer_outputs[0]
 
